@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>YenConverter</title>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 300px;
+      font-family: Arial, sans-serif;
+      padding: 10px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    select, button {
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #3367d6;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 5px;
+      border-radius: 4px;
+    }
+    .active {
+      background-color: #e6f4ea;
+      color: #137333;
+    }
+    .inactive {
+      background-color: #fce8e6;
+      color: #c5221f;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>YenConverter</h2>
+    
+    <label for="cardIssuer">Select Card Issuer:</label>
+    <select id="cardIssuer">
+      <option value="none">None (No Fee)</option>
+      <option value="visa">Visa (2.5%)</option>
+      <option value="mastercard">Mastercard (2.7%)</option>
+      <option value="amex">American Express (3.0%)</option>
+      <option value="jcb">JCB (1.8%)</option>
+      <option value="rakuten">Rakuten Card (2.0%)</option>
+      <option value="custom">Custom Fee</option>
+    </select>
+    
+    <div id="customFeeContainer" style="display: none;">
+      <label for="customFee">Custom Fee (%):</label>
+      <input type="number" id="customFee" min="0" max="10" step="0.1" value="0">
+    </div>
+    
+    <div class="status inactive" id="status">
+      Conversion inactive
+    </div>
+    
+    <button id="toggleConversion">Enable Conversion</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

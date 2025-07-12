@@ -1,0 +1,12 @@
+{
+    "none": 0,
+    "visa": 2.5,
+    "mastercard": 2.7,
+    "jcb": 1.6,
+    "amex": 2.0,
+    "rakuten": 2.0,
+    "mufg": 3.85,
+    "smbc": 3.63,
+    "jp bank": 3.63,
+    "mizuho": 3.85
+}

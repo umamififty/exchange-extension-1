@@ -1,26 +1,38 @@
 {
-    "manifest_version": 3,
-    "name": "YenConverter",
-    "version": "1.0",
-    "description": "Converts prices to Japanese Yen and calculates card fees",
-    "permissions": [
-      "activeTab",
-      "storage"
-    ],
-    "host_permissions": [
-      "https://*/",
-      "http://*/"
-    ],
-    "action": {
-      "default_popup": "popup.html"
-    },
-    "content_scripts": [
-      {
-        "matches": ["<all_urls>"],
-        "js": ["content.js"]
-      }
-    ],
-    "background": {
-      "service_worker": "background.js"
+  "manifest_version": 3,
+  "name": "Real-Time Currency Converter",
+  "version": "1.0",
+  "description": "Automatically converts prices on web pages to Japanese Yen with real-time exchange rates and optional card fees.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://open.er-api.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      
     }
-  }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "icons": {
+    
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["currencySymbols.json", "cardFees.json"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

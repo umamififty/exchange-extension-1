@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // DOM elements
+    const fromCurrencySelect = document.getElementById('fromCurrency');
     const cardIssuerSelect = document.getElementById('cardIssuer');
     const customFeeContainer = document.getElementById('customFeeContainer');
     const customFeeInput = document.getElementById('customFee');
@@ -12,16 +13,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const newPresetValueInput = document.getElementById('newPresetValue');
     const addPresetButton = document.getElementById('addPresetButton');
 
+    // --- Data Mapping ---
+    const currencyToCountryCode = {
+        "USD": "US", "EUR": "EU", "GBP": "GB", "CNY": "CN",
+        "KRW": "KR", "CAD": "CA", "AUD": "AU", "HKD": "HK",
+        "INR": "IN", "SGD": "SG", "MYR": "MY", "THB": "TH",
+        "IDR": "ID", "VND": "VN", "PHP": "PH", "TWD": "TW",
+        "CHF": "CH", "NZD": "NZ", "BRL": "BR", "RUB": "RU",
+        "TRY": "TR", "ZAR": "ZA", "JPY": "JP"
+    };
+
+    // --- Helper Functions ---
+    function getFlagEmoji(countryCode) {
+        if (!countryCode) return '';
+        const codePoints = countryCode
+            .toUpperCase()
+            .split('')
+            .map(char => 127397 + char.charCodeAt());
+        return String.fromCodePoint(...codePoints);
+    }
+
     // --- Initialization ---
 
     async function init() {
+        await populateFromCurrencies();
         await populateCardIssuers();
         await loadFeePresets();
         
-        const data = await chrome.storage.sync.get(['isActive', 'cardIssuer', 'customFee']);
+        const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'cardIssuer', 'customFee']);
         
         // Set UI states from storage
         updateToggleState(data.isActive || false);
+        fromCurrencySelect.value = data.fromCurrency || 'auto';
         cardIssuerSelect.value = data.cardIssuer || 'none';
         customFeeInput.value = data.customFee || 0;
         
@@ -53,9 +76,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Data Loading and Population ---
 
+    async function populateFromCurrencies() {
+        try {
+            const response = await fetch(chrome.runtime.getURL('currencySymbols.json')); //
+            const symbols = await response.json();
+            fromCurrencySelect.innerHTML = '<option value="auto">Auto-detect</option>'; // Clear existing options
+
+            for (const symbol in symbols) {
+                const code = symbols[symbol];
+                const countryCode = currencyToCountryCode[code];
+                const flag = getFlagEmoji(countryCode);
+                
+                const option = document.createElement('option');
+                option.value = code;
+                option.textContent = `${flag} ${code} (${symbol})`;
+                fromCurrencySelect.appendChild(option);
+            }
+        } catch (error) {
+            console.error('Error loading currency symbols:', error);
+        }
+    }
+
     async function populateCardIssuers() {
         try {
-            const response = await fetch(chrome.runtime.getURL('cardFees.json'));
+            const response = await fetch(chrome.runtime.getURL('cardFees.json')); //
             const cardFees = await response.json();
             cardIssuerSelect.innerHTML = ''; // Clear existing options
 
@@ -86,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isActive = statusDiv.classList.contains('active');
         const settings = {
             isActive: isActive,
+            fromCurrency: fromCurrencySelect.value,
             cardIssuer: cardIssuerSelect.value,
             customFee: parseFloat(customFeeInput.value) || 0
         };
@@ -170,6 +215,11 @@ document.addEventListener('DOMContentLoaded', () => {
         updateToggleState(isActive);
         notifyContentScript('toggleConversion', { isActive });
         saveSettings();
+    });
+    
+    fromCurrencySelect.addEventListener('change', () => {
+        const settings = saveSettings();
+        notifyContentScript('updateSettings', settings);
     });
 
     cardIssuerSelect.addEventListener('change', () => {

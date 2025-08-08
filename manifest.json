@@ -14,7 +14,8 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      
+      "16": "icons/16.png",
+      "32": "icons/32.png"
     }
   },
   "background": {
@@ -27,11 +28,18 @@
     }
   ],
   "icons": {
-    
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
   },
   "web_accessible_resources": [
     {
-      "resources": ["currencySymbols.json", "cardFees.json"],
+      "resources": [
+        "currencySymbols.json", 
+        "cardFees.json",
+        "flags/*.svg",
+        "flags/*.png"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

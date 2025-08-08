@@ -20,5 +20,7 @@
   "R$": "BRL",
   "₽": "RUB",
   "₺": "TRY",
-  "R": "ZAR"
+  "R": "ZAR",
+  "kr": "NOK",
+  "kr ": "SEK"
 }

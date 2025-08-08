@@ -11,9 +11,9 @@
       --secondary-text-color: #b0b0b0;
       --accent-color: #4dabf7;
       --accent-hover-color: #2998ff;
-      --success-bg-color: #2e7d32; /* Darker Green */
+      --success-bg-color: #2e7d32;
       --success-text-color: #dceddc;
-      --error-bg-color: #b71c1c; /* Darker Red */
+      --error-bg-color: #b71c1c;
       --error-text-color: #f9dadd;
       --border-color: rgba(255, 255, 255, 0.1);
     }
@@ -46,9 +46,22 @@
       font-size: 13px;
       margin-bottom: -8px;
     }
-    
+
+    select {
+      /* Remove default arrow */
+      -webkit-appearance: none;
+      appearance: none;
+      
+      /* Add custom arrow */
+      background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23b0b0b0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22/%3E%3C/svg%3E');
+      background-repeat: no-repeat;
+      background-position: right 1em top 50%; /* Position arrow */
+      background-size: .65em auto;
+    }
+
     select, input[type="text"], input[type="number"] {
       padding: 12px;
+      padding-right: 2.5em; /* Add space for the custom arrow */
       border-radius: 8px;
       border: none;
       background-color: var(--surface-color);
@@ -81,51 +94,90 @@
         box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
     }
     
-    #toggleConversion {
-      background-color: var(--accent-color);
-      color: white;
-    }
-    
-    #toggleConversion:hover {
-      background-color: var(--accent-hover-color);
-    }
-    
-    .status {
-      margin-top: 0;
-      padding: 12px;
-      border-radius: 8px;
-      text-align: center;
-      font-weight: bold;
-      font-size: 14px;
-    }
-
-    .active {
+    #toggleConversion.enabled {
       background-color: var(--success-bg-color);
       color: var(--success-text-color);
     }
+    #toggleConversion.enabled:hover {
+      background-color: #388e3c;
+    }
 
-    .inactive {
+    #toggleConversion.disabled {
       background-color: var(--error-bg-color);
       color: var(--error-text-color);
     }
+    #toggleConversion.disabled:hover {
+      background-color: #c62828;
+    }
 
-    /* Card for Presets */
-    .presets-card {
+    /* Ticker styles */
+    .ticker {
+        display: flex;
+        align-items: center;
+        background-color: var(--surface-color);
+        border-radius: 12px;
+        font-size: 18px;
+        height: 60px;
+        margin-top: -8px;
+        overflow: hidden;
+        position: relative;
+    }
+    .ticker-base, .ticker-converted {
+        font-weight: bold;
+        flex: 1;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        position: relative;
+        z-index: 2;
+
+        color: white;
+        text-shadow: 0px 0px 4px black, 0px 0px 6px black, 0px 0px 8px black;
+
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+    .ticker-base {
+        text-align: left;
+    }
+    .ticker-converted {
+        text-align: right;
+        justify-content: flex-end;
+    }
+    .ticker-arrow {
+        position: relative;
+        z-index: 2;
+        color: var(--secondary-text-color);
+    }
+    
+    /* Container for managing fees */
+    #feeManagementContainer {
       background-color: var(--surface-color);
       border-radius: 12px;
       padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+      display: none;
     }
 
-    .presets-card h4 {
+    #feeManagementContainer h4 {
       text-align: center;
       margin: 0 0 8px 0;
       color: var(--primary-text-color);
       font-weight: 500;
     }
     
+    #addFeeButton {
+        background-color: #666;
+        color: var(--primary-text-color);
+    }
+    #addFeeButton:hover {
+        background-color: #777;
+    }
+
     /* Styles for the presets list */
     .preset-item {
       display: flex;
@@ -134,43 +186,28 @@
       padding: 10px;
       background-color: rgba(0,0,0,0.1);
       border-radius: 6px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-
-    .preset-item:hover {
-      background-color: rgba(255,255,255,0.1);
     }
 
     .delete-preset {
-      background-color: #e53935; /* A slightly softer red */
+      background-color: #e53935;
       color: white;
       border: none;
-      border-radius: 50%; /* Circular button */
+      border-radius: 50%;
       width: 24px;
       height: 24px;
       cursor: pointer;
       font-size: 12px;
       font-weight: bold;
-      line-height: 24px; /* Center the 'X' */
+      line-height: 24px;
       text-align: center;
       padding: 0;
       box-shadow: none;
-      flex-shrink: 0; /* Prevent button from shrinking */
+      flex-shrink: 0;
     }
     
     .delete-preset:hover {
       background-color: #c62828;
     }
-    
-    #addPresetButton {
-        background-color: #666;
-        color: var(--primary-text-color);
-    }
-    #addPresetButton:hover {
-        background-color: #777;
-    }
-
   </style>
 </head>
 <body>
@@ -180,24 +217,22 @@
     <label for="fromCurrency">Convert From:</label>
     <select id="fromCurrency"></select>
 
-    <label for="cardIssuer">Select Card Issuer:</label>
+    <div class="ticker" id="exchangeRateTicker">
+        <span class="ticker-base">100 JPY</span>
+        <span class="ticker-arrow">⇌</span>
+        <span class="ticker-converted"></span>
+    </div>
+
+    <label for="cardIssuer">Select Card Issuer / Fee:</label>
     <select id="cardIssuer"></select>
     
-    <div id="customFeeContainer" style="display: none;">
-      <label for="customFee">Custom Fee (%):</label>
-      <input type="number" id="customFee" min="0" max="100" step="0.1" value="0">
-    </div>
-
-    <div class="presets-card">
-      <h4>Fee Presets</h4>
-      <div id="feePresetsList"></div>
-      <input type="text" id="newPresetName" placeholder="Preset Name">
-      <input type="number" id="newPresetValue" placeholder="Fee %" min="0" step="0.1">
-      <button id="addPresetButton">Add Preset</button>
-    </div>
-
-    <div class="status inactive" id="status">
-      Conversion Inactive
+    <div id="feeManagementContainer">
+      <h4>Manage Custom Presets</h4>
+      <div id="presetsList"></div>
+      <hr style="border-color: rgba(255,255,255,0.1); width: 100%;">
+      <input type="text" id="newFeeName" placeholder="New Preset Name">
+      <input type="number" id="newFeeValue" placeholder="Fee %" min="0" step="0.1">
+      <button id="addFeeButton">Add Preset</button>
     </div>
     
     <button id="toggleConversion">Enable Conversion</button>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Convert to Yen</title>
+  <title>Currency Converter</title>
   <meta charset="UTF-8">
   <style>
     :root {
@@ -212,13 +212,16 @@
 </head>
 <body>
   <div class="container">
-    <h2>Convert to Yen</h2>
+    <h2>Currency Converter</h2>
     
     <label for="fromCurrency">Convert From:</label>
     <select id="fromCurrency"></select>
 
+    <label for="toCurrency">Convert To:</label>
+    <select id="toCurrency"></select>
+
     <div class="ticker" id="exchangeRateTicker">
-        <span class="ticker-base">100 JPY</span>
+        <span class="ticker-base"></span>
         <span class="ticker-arrow">⇌</span>
         <span class="ticker-converted"></span>
     </div>

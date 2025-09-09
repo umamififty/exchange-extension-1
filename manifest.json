@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Real-Time Currency Converter",
-  "version": "1.0",
-  "description": "Automatically converts prices on web pages to Japanese Yen with real-time exchange rates and optional card fees.",
+  "version": "1.4",
+  "description": "Automatically converts prices on web pages real-time exchange rates and optional card fees.",
   "permissions": [
     "activeTab",
     "storage",

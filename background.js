@@ -1,13 +1,15 @@
-// Background script for the YenConverter extension
+// Background script for the Universal Currency Converter extension
 
 // Initialize default settings when extension is installed
 chrome.runtime.onInstalled.addListener(function() {
     chrome.storage.sync.set({
       isActive: false,
+      fromCurrency: 'auto',
+      toCurrency: 'JPY', // Default conversion to JPY
       cardIssuer: 'none',
       customFee: 0
     }, function() {
-      console.log('YenConverter initialized with default settings');
+      console.log('Universal Currency Converter initialized with default settings');
     });
     
     // Set up alarm to refresh exchange rates daily
@@ -23,18 +25,14 @@ chrome.runtime.onInstalled.addListener(function() {
     }
   });
   
-  // Fetch exchange rates
+  // Fetch exchange rates against USD
   async function fetchExchangeRates() {
     try {
-      const response = await fetch('https://open.er-api.com/v6/latest/JPY');
+      // Fetch rates with USD as the base currency for universal conversion
+      const response = await fetch('https://open.er-api.com/v6/latest/USD');
       const data = await response.json();
       
-      // Convert the rates to JPY base
-      const exchangeRates = Object.keys(data.rates).reduce((acc, currency) => {
-        // Invert the rate since we want JPY as base
-        acc[currency] = 1 / data.rates[currency];
-        return acc;
-      }, {});
+      const exchangeRates = data.rates; // Rates are now relative to USD
       
       // Save the exchange rates and timestamp
       const timestamp = new Date().getTime();
@@ -43,7 +41,7 @@ chrome.runtime.onInstalled.addListener(function() {
         rateTimestamp: timestamp
       });
       
-      console.log('Exchange rates updated at', new Date(timestamp).toLocaleString());
+      console.log('Exchange rates updated against USD at', new Date(timestamp).toLocaleString());
       
       // Notify any active tabs to refresh their rates
       chrome.tabs.query({}, function(tabs) {

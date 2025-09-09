@@ -1,6 +1,7 @@
 // Global variables
 let isActive = false;
 let fromCurrency = 'auto';
+let toCurrency = 'JPY'; // Add 'to' currency
 let cardIssuer = 'none';
 let customFee = 0;
 let exchangeRates = {};
@@ -9,6 +10,7 @@ let originalPrices = new Map();
 // These will be loaded from JSON files
 let currencySymbols = {};
 let cardFees = {};
+let currencyCodeToSymbol = {}; // New reverse map for symbols
 
 // To be built once after data is loaded
 let allIdentifiersRegex;
@@ -26,6 +28,11 @@ async function init() {
     ]);
     currencySymbols = await symbolsResponse.json();
     cardFees = await feesResponse.json();
+
+    // Create a reverse map to get symbol from code
+    currencyCodeToSymbol = Object.fromEntries(Object.entries(currencySymbols).map(([symbol, code]) => [code, symbol]));
+    currencyCodeToSymbol['JPY'] = '¥'; // Ensure JPY is in the map
+
     buildAllIdentifiersRegex(); // Build the master regex
   } catch (error) {
     console.error('Error loading data files:', error);
@@ -33,9 +40,10 @@ async function init() {
   }
 
   // Load settings from storage
-  const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'cardIssuer', 'customFee']);
+  const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'toCurrency', 'cardIssuer', 'customFee']);
   isActive = data.isActive || false;
   fromCurrency = data.fromCurrency || 'auto';
+  toCurrency = data.toCurrency || 'JPY'; // Load 'to' currency
   cardIssuer = data.cardIssuer || 'none';
   customFee = data.customFee || 0;
 
@@ -58,7 +66,7 @@ async function init() {
 function buildAllIdentifiersRegex() {
     const allSymbols = Object.keys(currencySymbols).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const allCodes = Object.values(currencySymbols);
-    const allIdentifiers = [...allSymbols, ...allCodes];
+    const allIdentifiers = [...allSymbols, ...allCodes, 'JPY']; // Add JPY
     const identifiersPart = allIdentifiers.join('|');
     const numberPart = `\\d+(?:[\\s.,]\\d+)*`; // Handles spaces and separators
 
@@ -69,15 +77,16 @@ function buildAllIdentifiersRegex() {
 // Fetch latest exchange rates from an API
 async function updateExchangeRates() {
   try {
-    const response = await fetch('https://open.er-api.com/v6/latest/JPY');
+    // Fetch against USD
+    const response = await fetch('https://open.er-api.com/v6/latest/USD');
     const data = await response.json();
     exchangeRates = data.rates;
-    exchangeRates['JPY'] = 1;
 
     const timestamp = new Date().getTime();
     chrome.storage.local.set({ exchangeRates, rateTimestamp: timestamp });
 
-  } catch (error) {
+  } catch (error)
+ {
     console.error('Error fetching exchange rates:', error);
     const data = await chrome.storage.local.get(['exchangeRates', 'rateTimestamp']);
     if (data.exchangeRates) {
@@ -121,61 +130,84 @@ function processPriceNode(node) {
     return;
   }
   const text = node.textContent;
-  originalPrices.set(node, text);
   let newText = text;
-  const numberPart = `\\d+(?:[\\s.,]\\d+)*`; // Handles spaces and separators
+  
+  const performConversion = (match, amount, fromCode) => {
+    if (!amount || !fromCode) return match;
+    
+    // **FIXED LOGIC**: This now correctly removes all commas for thousands separators.
+    const cleanAmount = amount.replace(/,/g, '');
+    const price = parseFloat(cleanAmount);
+    
+    if (isNaN(price) || fromCode === toCurrency) return match; // Don't convert if it's already the target currency
+
+    const convertedString = convertCurrency(price, fromCode);
+    return `${match} (${convertedString})`;
+  };
 
   if (fromCurrency !== 'auto') {
-    // Manual override: Find any price and convert it using the selected currency
-    newText = newText.replace(allIdentifiersRegex, (match, amount1, amount2) => {
-        const amount = amount1 || amount2; // The number could be in either capturing group
-        if (!amount) return match;
-
-        const cleanAmount = amount.replace(/\s/g, '').replace(',', '.');
-        const price = parseFloat(cleanAmount);
-        const yenPrice = convertToYen(price, fromCurrency); // Use the manually selected currency
-        return `${match} (¥${yenPrice})`;
+    // Manual override mode
+    newText = text.replace(allIdentifiersRegex, (match, amount1, amount2) => {
+      const amount = amount1 || amount2;
+      return performConversion(match, amount, fromCurrency);
     });
-
   } else {
     // Auto-detect mode
-    for (const [symbol, code] of Object.entries(currencySymbols)) {
-      const symbolRegex = new RegExp(`(?<=\\s|^)${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(${numberPart})`, 'g');
-      newText = newText.replace(symbolRegex, (match, amount) => {
-        const cleanAmount = amount.replace(/\s/g, '').replace(',', '.');
-        const price = parseFloat(cleanAmount);
-        const yenPrice = convertToYen(price, code); // Use the detected currency code
-        return `${match} (¥${yenPrice})`;
-      });
-    }
+    newText = text.replace(allIdentifiersRegex, (match, amount1, amount2) => {
+      const amount = amount1 || amount2;
+      const cleanMatch = match.toUpperCase();
+      let detectedCode = null;
 
-    const codeRegex = new RegExp(`(${numberPart})\\s*([A-Z]{3})`, 'g');
-    newText = newText.replace(codeRegex, (match, amount, code) => {
-      if (exchangeRates[code]) {
-        const cleanAmount = amount.replace(/\s/g, '').replace(',', '.');
-        const price = parseFloat(cleanAmount);
-        const yenPrice = convertToYen(price, code); // Use the detected currency code
-        return `${match} (¥${yenPrice})`;
+      // Find which code or symbol was in the match
+      for (const [symbol, code] of Object.entries(currencySymbols)) {
+          if (cleanMatch.includes(symbol)) {
+              detectedCode = code;
+              break;
+          }
       }
-      return match;
+      if (!detectedCode) {
+          for (const code of Object.values(currencySymbols)) {
+              if (cleanMatch.includes(code)) {
+                  detectedCode = code;
+                  break;
+              }
+          }
+      }
+       if (!detectedCode && cleanMatch.includes('JPY')) {
+          detectedCode = 'JPY';
+      }
+
+      return detectedCode ? performConversion(match, amount, detectedCode) : match;
     });
   }
 
   if (newText !== text) {
+    originalPrices.set(node, text);
     node.textContent = newText;
   }
 }
 
-// Convert a given price to JPY based on currency code and fees
-function convertToYen(price, currencyCode) {
-  const rate = exchangeRates[currencyCode];
-  if (!rate) return 'N/A';
-  let yenPrice = price / rate;
+
+// Convert a given price to the target currency
+function convertCurrency(price, fromCode) {
+  const fromRate = exchangeRates[fromCode]; // Rate vs USD
+  const toRate = exchangeRates[toCurrency];   // Rate vs USD
+
+  if (!fromRate || !toRate) return 'N/A';
+  
+  // Convert price to USD first, then to the target currency
+  const priceInUSD = price / fromRate;
+  let convertedPrice = priceInUSD * toRate;
+
   const feeRate = cardIssuer === 'custom' ? customFee : (cardFees[cardIssuer] || 0);
   if (feeRate > 0) {
-    yenPrice *= (1 + feeRate / 100);
+    convertedPrice *= (1 + feeRate / 100);
   }
-  return Math.round(yenPrice).toLocaleString();
+
+  const finalPrice = Math.round(convertedPrice).toLocaleString();
+  const toSymbol = currencyCodeToSymbol[toCurrency] || toCurrency;
+
+  return `${toSymbol}${finalPrice}`;
 }
 
 // Set up MutationObserver to handle dynamic content
@@ -210,6 +242,7 @@ function handleMessages(message, sender, sendResponse) {
       break;
     case 'updateSettings':
       fromCurrency = message.fromCurrency;
+      toCurrency = message.toCurrency; // Update 'to' currency
       cardIssuer = message.cardIssuer;
       customFee = message.customFee;
       if (isActive) {

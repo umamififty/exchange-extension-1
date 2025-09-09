@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // DOM elements
     const fromCurrencySelect = document.getElementById('fromCurrency');
+    const toCurrencySelect = document.getElementById('toCurrency');
     const cardIssuerSelect = document.getElementById('cardIssuer');
     const toggleButton = document.getElementById('toggleConversion');
     const exchangeRateTicker = document.getElementById('exchangeRateTicker');
@@ -21,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
             "AUD": "au", "HKD": "hk", "INR": "in", "SGD": "sg", "MYR": "my", "THB": "th", 
             "IDR": "id", "VND": "vn", "PHP": "ph", "TWD": "tw", "CHF": "ch", "NZD": "nz", 
             "BRL": "br", "RUB": "ru", "TRY": "tr", "ZAR": "za", "JPY": "jp",
-            "NOK": "no", "SEK": "se" // Added Norway and Sweden
+            "NOK": "no", "SEK": "se"
         };
         const cc = currencyToCountryCode[countryCode];
         if (!cc) return '';
@@ -31,23 +32,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialization
     async function init() {
-        const jpyFlagUrl = chrome.runtime.getURL('flags/JPY.svg');
-        try {
-            const response = await fetch(jpyFlagUrl);
-            if (response.ok) {
-                tickerBaseValue.style.backgroundImage = `linear-gradient(to left, var(--surface-color) 0%, transparent 80%), url('${jpyFlagUrl}')`;
-            }
-        } catch (error) {
-            console.warn('Could not load JPY.svg flag.');
-        }
-
-        await populateFromCurrencies();
-        await populateCardIssuers();
+        await Promise.all([
+            populateCurrencies(fromCurrencySelect, 'from'),
+            populateCurrencies(toCurrencySelect, 'to'),
+            populateCardIssuers()
+        ]);
         
-        const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'cardIssuer']);
+        const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'toCurrency', 'cardIssuer']);
 
         updateToggleState(data.isActive || false);
         fromCurrencySelect.value = data.fromCurrency || 'auto';
+        toCurrencySelect.value = data.toCurrency || 'JPY';
         cardIssuerSelect.value = data.cardIssuer || 'none';
         
         await updateTicker();
@@ -70,39 +65,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function updateTicker() {
-        const selectedCurrency = fromCurrencySelect.value;
-        
-        if (selectedCurrency === 'auto' || selectedCurrency === 'JPY') {
-            tickerConvertedValue.textContent = '';
-            tickerConvertedValue.style.backgroundImage = 'none';
+        const fromCode = fromCurrencySelect.value;
+        const toCode = toCurrencySelect.value;
+
+        if (fromCode === 'auto' || fromCode === toCode) {
+            exchangeRateTicker.style.display = 'none';
             return;
         }
-        
-        const flagUrl = chrome.runtime.getURL(`flags/${selectedCurrency}.svg`);
-        
-        try {
-            const response = await fetch(flagUrl);
-            if (response.ok) {
-                tickerConvertedValue.style.backgroundImage = `linear-gradient(to right, var(--surface-color) 0%, transparent 80%), url('${flagUrl}')`;
-            } else {
-                tickerConvertedValue.style.backgroundImage = 'none';
-            }
-        } catch (error) {
-            console.warn(`Could not fetch flag for ${selectedCurrency}:`, error);
-            tickerConvertedValue.style.backgroundImage = 'none';
-        }
+        exchangeRateTicker.style.display = 'flex';
 
+        // Set flags
+        const fromFlagUrl = chrome.runtime.getURL(`flags/${fromCode}.svg`);
+        const toFlagUrl = chrome.runtime.getURL(`flags/${toCode}.svg`);
+        tickerBaseValue.style.backgroundImage = `linear-gradient(to left, var(--surface-color) 0%, transparent 80%), url('${fromFlagUrl}')`;
+        tickerConvertedValue.style.backgroundImage = `linear-gradient(to right, var(--surface-color) 0%, transparent 80%), url('${toFlagUrl}')`;
+
+        // Set text
+        tickerBaseValue.textContent = `1 ${fromCode}`;
         tickerConvertedValue.textContent = '...';
 
         try {
             const { exchangeRates } = await chrome.storage.local.get('exchangeRates');
-            if (exchangeRates && exchangeRates[selectedCurrency]) {
-                const rate = exchangeRates[selectedCurrency];
-                const convertedAmount = 100 * rate;
-                const decimalPlaces = convertedAmount < 1 ? 4 : 2;
-                tickerConvertedValue.textContent = `${convertedAmount.toFixed(decimalPlaces)} ${selectedCurrency}`;
+            if (exchangeRates && exchangeRates[fromCode] && exchangeRates[toCode]) {
+                const fromRate = exchangeRates[fromCode]; // Rate vs USD
+                const toRate = exchangeRates[toCode];     // Rate vs USD
+                const conversionRate = toRate / fromRate;
+                tickerConvertedValue.textContent = `${conversionRate.toFixed(4)} ${toCode}`;
             } else {
-                 tickerConvertedValue.textContent = 'N/A';
+                tickerConvertedValue.textContent = 'N/A';
             }
         } catch (error) {
             console.error('Could not get rates for ticker:', error);
@@ -111,20 +101,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Data Loading and Population
-    async function populateFromCurrencies() {
+    async function populateCurrencies(selectElement, type) {
         try {
             const response = await fetch(chrome.runtime.getURL('currencySymbols.json'));
             const symbols = await response.json();
-            fromCurrencySelect.innerHTML = '<option value="auto">Auto-detect</option>';
+            
+            if (type === 'from') {
+                selectElement.innerHTML = '<option value="auto">Auto-detect</option>';
+            } else {
+                selectElement.innerHTML = '';
+            }
 
-            for (const symbol in symbols) {
-                const code = symbols[symbol];
+            const currencies = { ...symbols, "¥": "JPY" }; // Add JPY to the list
+
+            for (const symbol in currencies) {
+                const code = currencies[symbol];
                 const flag = getFlagEmoji(code);
-
                 const option = document.createElement('option');
                 option.value = code;
-                option.textContent = `${flag} ${code} (${symbol})`;
-                fromCurrencySelect.appendChild(option);
+                option.textContent = `${code} (${symbol}) ${flag}`;
+                selectElement.appendChild(option);
             }
         } catch (error) {
             console.error('Error loading currency symbols:', error);
@@ -132,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function populateCardIssuers() {
+        // ... (this function remains unchanged)
         try {
             const [feesResponse, presetsData] = await Promise.all([
                 fetch(chrome.runtime.getURL('cardFees.json')),
@@ -186,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const settings = {
             isActive: toggleButton.classList.contains('enabled'),
             fromCurrency: fromCurrencySelect.value,
+            toCurrency: toCurrencySelect.value,
             cardIssuer: cardIssuerSelect.value,
         };
         chrome.storage.sync.set(settings);
@@ -202,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fee Preset Logic
     async function renderPresetManagementList() {
+        // ... (this function remains unchanged)
         const { feePresets } = await chrome.storage.sync.get('feePresets');
         presetsListDiv.innerHTML = '';
 
@@ -228,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function addNewFee() {
+        // ... (this function remains unchanged)
         const name = newFeeNameInput.value.trim();
         const value = parseFloat(newFeeValueInput.value);
         if (!name || isNaN(value)) {
@@ -251,6 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function deletePreset(nameToDelete) {
+        // ... (this function remains unchanged)
         const { feePresets } = await chrome.storage.sync.get('feePresets');
         if (feePresets && feePresets[nameToDelete]) {
             delete feePresets[nameToDelete];
@@ -272,6 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     fromCurrencySelect.addEventListener('change', () => {
+        updateTicker();
+        saveAndNotify();
+    });
+
+    toCurrencySelect.addEventListener('change', () => {
         updateTicker();
         saveAndNotify();
     });

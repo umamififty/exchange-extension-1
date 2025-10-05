@@ -4,11 +4,15 @@
   "description": "",
   "main": "background.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "test:e2e": "npx playwright test",
+    "serve:e2e": "npx http-server ./e2e -p 8888 --silent"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@playwright/test": "^1.40.1",
+    "http-server": "^14.1.1",
     "jest": "^29.7.0"
   }
 }

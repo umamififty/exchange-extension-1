@@ -1,12 +1,33 @@
 {
+  "DEFAULT": {
     "none": 0,
-    "Visa": 2.5,
-    "Mastercard": 2.7,
+    "Visa": 2.0,
+    "Mastercard": 2.2,
+    "American Express": 2.5
+  },
+  "JPY": {
     "JCB": 1.6,
-    "American Express": 2.0,
     "Rakuten": 2.0,
     "MUFG": 3.85,
     "SMBC": 3.63,
     "Japan Post Bank": 3.63,
     "Mizuho": 3.85
+  },
+  "USD": {
+    "No Fee Card (e.g. Capital One)": 0,
+    "Standard Bank Card (e.g. Chase)": 3.0
+  },
+  "GBP": {
+    "Digital Bank (e.g. Monzo)": 0,
+    "Traditional Bank (e.g. Barclays)": 2.99
+  },
+  "SGD": {
+    "DBS/UOB/OCBC": 3.25
+  },
+  "AUD": {
+    "Standard Bank Card": 3.0
+  },
+  "KRW": {
+    "Shinhan/Samsung Card": 1.2
+  }
 }

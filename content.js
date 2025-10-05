@@ -1,7 +1,7 @@
 // Global variables
 let isActive = false;
 let fromCurrency = 'auto';
-let toCurrency = 'JPY'; // Add 'to' currency
+let toCurrency = 'JPY';
 let cardIssuer = 'none';
 let customFee = 0;
 let exchangeRates = {};
@@ -10,7 +10,7 @@ let originalPrices = new Map();
 // These will be loaded from JSON files
 let currencySymbols = {};
 let cardFees = {};
-let currencyCodeToSymbol = {}; // New reverse map for symbols
+let currencyCodeToSymbol = {};
 
 // To be built once after data is loaded
 let allIdentifiersRegex;
@@ -20,7 +20,6 @@ init();
 
 // Initialization function
 async function init() {
-  // Fetch data files first
   try {
     const [symbolsResponse, feesResponse] = await Promise.all([
       fetch(chrome.runtime.getURL('currencySymbols.json')),
@@ -29,64 +28,50 @@ async function init() {
     currencySymbols = await symbolsResponse.json();
     cardFees = await feesResponse.json();
 
-    // Create a reverse map to get symbol from code
     currencyCodeToSymbol = Object.fromEntries(Object.entries(currencySymbols).map(([symbol, code]) => [code, symbol]));
-    currencyCodeToSymbol['JPY'] = '¥'; // Ensure JPY is in the map
+    currencyCodeToSymbol['JPY'] = '¥';
 
-    buildAllIdentifiersRegex(); // Build the master regex
+    buildAllIdentifiersRegex();
   } catch (error) {
     console.error('Error loading data files:', error);
-    return; // Stop initialization if data files fail to load
+    return;
   }
 
-  // Load settings from storage
   const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'toCurrency', 'cardIssuer', 'customFee']);
   isActive = data.isActive || false;
   fromCurrency = data.fromCurrency || 'auto';
-  toCurrency = data.toCurrency || 'JPY'; // Load 'to' currency
+  toCurrency = data.toCurrency || 'JPY';
   cardIssuer = data.cardIssuer || 'none';
   customFee = data.customFee || 0;
 
-  // Fetch exchange rates
   await updateExchangeRates();
 
-  // If active, start the conversion
   if (isActive) {
     convertPrices();
   }
 
-  // Set up a MutationObserver to detect DOM changes
   setupMutationObserver();
-
-  // Listen for messages from popup
   chrome.runtime.onMessage.addListener(handleMessages);
 }
 
-// Build a single regex to find all known currency symbols and codes
 function buildAllIdentifiersRegex() {
     const allSymbols = Object.keys(currencySymbols).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const allCodes = Object.values(currencySymbols);
-    const allIdentifiers = [...allSymbols, ...allCodes, 'JPY']; // Add JPY
+    const allIdentifiers = [...allSymbols, ...allCodes, 'JPY'];
     const identifiersPart = allIdentifiers.join('|');
-    const numberPart = `\\d+(?:[\\s.,]\\d+)*`; // Handles spaces and separators
+    const numberPart = `\\d+(?:[\\s.,]\\d+)*`;
 
-    // Regex to find an identifier before or after a number
     allIdentifiersRegex = new RegExp(`(?:${identifiersPart})\\s*(${numberPart})|(${numberPart})\\s*(?:${identifiersPart})`, 'g');
 }
 
-// Fetch latest exchange rates from an API
 async function updateExchangeRates() {
   try {
-    // Fetch against USD
     const response = await fetch('https://open.er-api.com/v6/latest/USD');
     const data = await response.json();
     exchangeRates = data.rates;
-
     const timestamp = new Date().getTime();
     chrome.storage.local.set({ exchangeRates, rateTimestamp: timestamp });
-
-  } catch (error)
- {
+  } catch (error) {
     console.error('Error fetching exchange rates:', error);
     const data = await chrome.storage.local.get(['exchangeRates', 'rateTimestamp']);
     if (data.exchangeRates) {
@@ -96,13 +81,11 @@ async function updateExchangeRates() {
   }
 }
 
-// Convert all prices on the page
 function convertPrices() {
   const textNodes = findTextNodes(document.body);
   textNodes.forEach(node => processPriceNode(node));
 }
 
-// Recursively find all relevant text nodes
 function findTextNodes(element) {
   const textNodes = [];
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
@@ -116,7 +99,6 @@ function findTextNodes(element) {
       return NodeFilter.FILTER_SKIP;
     }
   });
-
   let node;
   while (node = walker.nextNode()) {
     textNodes.push(node);
@@ -124,61 +106,55 @@ function findTextNodes(element) {
   return textNodes;
 }
 
-// Process a single text node for price conversion
-function processPriceNode(node) {
+async function processPriceNode(node) {
   if (originalPrices.has(node) || !node.textContent.trim()) {
     return;
   }
   const text = node.textContent;
   let newText = text;
-  
-  const performConversion = (match, amount, fromCode) => {
+
+  const performConversion = async (match, amount, fromCode) => {
     if (!amount || !fromCode) return match;
-    
-    // **FIXED LOGIC**: This now correctly removes all commas for thousands separators.
     const cleanAmount = amount.replace(/,/g, '');
     const price = parseFloat(cleanAmount);
-    
-    if (isNaN(price) || fromCode === toCurrency) return match; // Don't convert if it's already the target currency
+    if (isNaN(price) || fromCode === toCurrency) return match;
 
-    const convertedString = convertCurrency(price, fromCode);
+    const convertedString = await convertCurrency(price, fromCode);
     return `${match} (${convertedString})`;
   };
+  
+  const replacements = [];
+  const matches = Array.from(text.matchAll(allIdentifiersRegex));
 
-  if (fromCurrency !== 'auto') {
-    // Manual override mode
-    newText = text.replace(allIdentifiersRegex, (match, amount1, amount2) => {
-      const amount = amount1 || amount2;
-      return performConversion(match, amount, fromCurrency);
-    });
-  } else {
-    // Auto-detect mode
-    newText = text.replace(allIdentifiersRegex, (match, amount1, amount2) => {
-      const amount = amount1 || amount2;
-      const cleanMatch = match.toUpperCase();
-      let detectedCode = null;
+  for (const matchData of matches) {
+      const match = matchData[0];
+      const amount = matchData[1] || matchData[2];
+      let fromCode = null;
 
-      // Find which code or symbol was in the match
-      for (const [symbol, code] of Object.entries(currencySymbols)) {
-          if (cleanMatch.includes(symbol)) {
-              detectedCode = code;
-              break;
+      if (fromCurrency !== 'auto') {
+          fromCode = fromCurrency;
+      } else {
+          const cleanMatch = match.toUpperCase();
+          for (const [symbol, code] of Object.entries(currencySymbols)) {
+              if (cleanMatch.includes(symbol)) { fromCode = code; break; }
           }
-      }
-      if (!detectedCode) {
-          for (const code of Object.values(currencySymbols)) {
-              if (cleanMatch.includes(code)) {
-                  detectedCode = code;
-                  break;
+          if (!fromCode) {
+              for (const code of Object.values(currencySymbols)) {
+                  if (cleanMatch.includes(code)) { fromCode = code; break; }
               }
           }
-      }
-       if (!detectedCode && cleanMatch.includes('JPY')) {
-          detectedCode = 'JPY';
+          if (!fromCode && cleanMatch.includes('JPY')) { fromCode = 'JPY'; }
       }
 
-      return detectedCode ? performConversion(match, amount, detectedCode) : match;
-    });
+      if (fromCode) {
+          const replacement = await performConversion(match, amount, fromCode);
+          replacements.push({ original: match, new: replacement });
+      }
+  }
+
+  // Apply all replacements at once to avoid issues with nested matches
+  for(const rep of replacements){
+      newText = newText.replace(rep.original, rep.new);
   }
 
   if (newText !== text) {
@@ -187,30 +163,43 @@ function processPriceNode(node) {
   }
 }
 
+async function convertCurrency(price, fromCode) {
+    const fromRate = exchangeRates[fromCode];
+    const toRate = exchangeRates[toCurrency];
 
-// Convert a given price to the target currency
-function convertCurrency(price, fromCode) {
-  const fromRate = exchangeRates[fromCode]; // Rate vs USD
-  const toRate = exchangeRates[toCurrency];   // Rate vs USD
+    if (!fromRate || !toRate) return 'N/A';
 
-  if (!fromRate || !toRate) return 'N/A';
-  
-  // Convert price to USD first, then to the target currency
-  const priceInUSD = price / fromRate;
-  let convertedPrice = priceInUSD * toRate;
+    const priceInUSD = price / fromRate;
+    let convertedPrice = priceInUSD * toRate;
 
-  const feeRate = cardIssuer === 'custom' ? customFee : (cardFees[cardIssuer] || 0);
-  if (feeRate > 0) {
-    convertedPrice *= (1 + feeRate / 100);
-  }
+    if (cardIssuer && cardIssuer !== 'none') {
+        if (!cardFees.DEFAULT) {
+            const feesResponse = await fetch(chrome.runtime.getURL('cardFees.json'));
+            cardFees = await feesResponse.json();
+        }
 
-  const finalPrice = Math.round(convertedPrice).toLocaleString();
-  const toSymbol = currencyCodeToSymbol[toCurrency] || toCurrency;
+        let feeRate = 0;
+        const presets = (await chrome.storage.sync.get('feePresets')).feePresets || {};
 
-  return `${toSymbol}${finalPrice}`;
+        if (cardFees[toCurrency] && cardFees[toCurrency][cardIssuer]) {
+            feeRate = cardFees[toCurrency][cardIssuer];
+        } else if (cardFees.DEFAULT && cardFees.DEFAULT[cardIssuer]) {
+            feeRate = cardFees.DEFAULT[cardIssuer];
+        } else if (presets[cardIssuer]) {
+            feeRate = presets[cardIssuer];
+        }
+
+        if (feeRate > 0) {
+            convertedPrice *= (1 + feeRate / 100);
+        }
+    }
+
+    const finalPrice = Math.round(convertedPrice).toLocaleString();
+    const toSymbol = currencyCodeToSymbol[toCurrency] || toCurrency;
+
+    return `${toSymbol}${finalPrice}`;
 }
 
-// Set up MutationObserver to handle dynamic content
 function setupMutationObserver() {
   const observer = new MutationObserver((mutations) => {
     if (isActive) {
@@ -229,7 +218,6 @@ function setupMutationObserver() {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// Handle messages from the popup script
 function handleMessages(message, sender, sendResponse) {
   switch (message.action) {
     case 'toggleConversion':
@@ -242,7 +230,7 @@ function handleMessages(message, sender, sendResponse) {
       break;
     case 'updateSettings':
       fromCurrency = message.fromCurrency;
-      toCurrency = message.toCurrency; // Update 'to' currency
+      toCurrency = message.toCurrency;
       cardIssuer = message.cardIssuer;
       customFee = message.customFee;
       if (isActive) {
@@ -255,7 +243,6 @@ function handleMessages(message, sender, sendResponse) {
   return true;
 }
 
-// Restore prices to their original state
 function restoreOriginalPrices() {
   originalPrices.forEach((originalText, node) => {
     if (node.parentNode) {

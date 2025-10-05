@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // DOM elements
     const fromCurrencySelect = document.getElementById('fromCurrency');
     const toCurrencySelect = document.getElementById('toCurrency');
     const cardIssuerSelect = document.getElementById('cardIssuer');
@@ -7,20 +6,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const exchangeRateTicker = document.getElementById('exchangeRateTicker');
     const tickerBaseValue = document.querySelector('.ticker-base');
     const tickerConvertedValue = document.querySelector('.ticker-converted');
-
-    // Fee Management elements
     const feeManagementContainer = document.getElementById('feeManagementContainer');
     const presetsListDiv = document.getElementById('presetsList');
     const newFeeNameInput = document.getElementById('newFeeName');
     const newFeeValueInput = document.getElementById('newFeeValue');
     const addFeeButton = document.getElementById('addFeeButton');
 
-    // Helper Functions
     function getFlagEmoji(countryCode) {
         const currencyToCountryCode = {
-            "USD": "us", "EUR": "eu", "GBP": "gb", "CNY": "cn", "KRW": "kr", "CAD": "ca", 
-            "AUD": "au", "HKD": "hk", "INR": "in", "SGD": "sg", "MYR": "my", "THB": "th", 
-            "IDR": "id", "VND": "vn", "PHP": "ph", "TWD": "tw", "CHF": "ch", "NZD": "nz", 
+            "USD": "us", "EUR": "eu", "GBP": "gb", "CNY": "cn", "KRW": "kr", "CAD": "ca",
+            "AUD": "au", "HKD": "hk", "INR": "in", "SGD": "sg", "MYR": "my", "THB": "th",
+            "IDR": "id", "VND": "vn", "PHP": "ph", "TWD": "tw", "CHF": "ch", "NZD": "nz",
             "BRL": "br", "RUB": "ru", "TRY": "tr", "ZAR": "za", "JPY": "jp",
             "NOK": "no", "SEK": "se"
         };
@@ -30,12 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return String.fromCodePoint(...codePoints);
     }
 
-    // Initialization
     async function init() {
         await Promise.all([
             populateCurrencies(fromCurrencySelect, 'from'),
-            populateCurrencies(toCurrencySelect, 'to'),
-            populateCardIssuers()
+            populateCurrencies(toCurrencySelect, 'to')
         ]);
         
         const data = await chrome.storage.sync.get(['isActive', 'fromCurrency', 'toCurrency', 'cardIssuer']);
@@ -43,13 +37,15 @@ document.addEventListener('DOMContentLoaded', () => {
         updateToggleState(data.isActive || false);
         fromCurrencySelect.value = data.fromCurrency || 'auto';
         toCurrencySelect.value = data.toCurrency || 'JPY';
+
+        await populateCardIssuers();
+        
         cardIssuerSelect.value = data.cardIssuer || 'none';
         
         await updateTicker();
         toggleFeeManagementView();
     }
 
-    // UI Update Functions
     function updateToggleState(isActive) {
         toggleButton.textContent = isActive ? 'Conversion Enabled' : 'Conversion Disabled';
         toggleButton.className = isActive ? 'enabled' : 'disabled';
@@ -74,21 +70,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         exchangeRateTicker.style.display = 'flex';
 
-        // Set flags
         const fromFlagUrl = chrome.runtime.getURL(`flags/${fromCode}.svg`);
         const toFlagUrl = chrome.runtime.getURL(`flags/${toCode}.svg`);
         tickerBaseValue.style.backgroundImage = `linear-gradient(to left, var(--surface-color) 0%, transparent 80%), url('${fromFlagUrl}')`;
         tickerConvertedValue.style.backgroundImage = `linear-gradient(to right, var(--surface-color) 0%, transparent 80%), url('${toFlagUrl}')`;
 
-        // Set text
         tickerBaseValue.textContent = `1 ${fromCode}`;
         tickerConvertedValue.textContent = '...';
 
         try {
             const { exchangeRates } = await chrome.storage.local.get('exchangeRates');
             if (exchangeRates && exchangeRates[fromCode] && exchangeRates[toCode]) {
-                const fromRate = exchangeRates[fromCode]; // Rate vs USD
-                const toRate = exchangeRates[toCode];     // Rate vs USD
+                const fromRate = exchangeRates[fromCode];
+                const toRate = exchangeRates[toCode];
                 const conversionRate = toRate / fromRate;
                 tickerConvertedValue.textContent = `${conversionRate.toFixed(4)} ${toCode}`;
             } else {
@@ -100,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Data Loading and Population
     async function populateCurrencies(selectElement, type) {
         try {
             const response = await fetch(chrome.runtime.getURL('currencySymbols.json'));
@@ -112,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectElement.innerHTML = '';
             }
 
-            const currencies = { ...symbols, "¥": "JPY" }; // Add JPY to the list
+            const currencies = { ...symbols, "¥": "JPY" };
 
             for (const symbol in currencies) {
                 const code = currencies[symbol];
@@ -128,31 +121,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function populateCardIssuers() {
-        // ... (this function remains unchanged)
         try {
             const [feesResponse, presetsData] = await Promise.all([
                 fetch(chrome.runtime.getURL('cardFees.json')),
                 chrome.storage.sync.get('feePresets')
             ]);
             
-            const baseFees = await feesResponse.json();
+            const feesByCurrency = await feesResponse.json();
             const customPresets = presetsData.feePresets || {};
-            
+            const selectedToCurrency = toCurrencySelect.value;
+
+            const currentSelection = cardIssuerSelect.value;
             cardIssuerSelect.innerHTML = '';
 
-            for (const issuer in baseFees) {
+            // Add DEFAULT fees (always shown)
+            const defaultFees = feesByCurrency.DEFAULT || {};
+            for (const issuer in defaultFees) {
                 const option = document.createElement('option');
                 option.value = issuer;
-                let text = issuer.charAt(0).toUpperCase() + issuer.slice(1);
-                if (baseFees[issuer] > 0) text += ` (${baseFees[issuer]}%)`;
+                let text = issuer;
+                if (defaultFees[issuer] > 0) text += ` (${defaultFees[issuer]}%)`;
                 option.textContent = text;
                 cardIssuerSelect.appendChild(option);
             }
+
+            // **THE FIX:** This now checks for ANY matching currency key, not just 'JPY'
+            if (feesByCurrency[selectedToCurrency]) {
+                const specificFees = feesByCurrency[selectedToCurrency];
+                const separator = document.createElement('option');
+                separator.disabled = true;
+                separator.textContent = `── ${selectedToCurrency} Specific Cards ──`; // Dynamic label
+                cardIssuerSelect.appendChild(separator);
+
+                for (const issuer in specificFees) {
+                    const option = document.createElement('option');
+                    option.value = issuer;
+                    option.textContent = `${issuer} (${specificFees[issuer]}%)`;
+                    cardIssuerSelect.appendChild(option);
+                }
+            }
             
+            // Add custom presets
             if (Object.keys(customPresets).length > 0) {
                 const separator = document.createElement('option');
                 separator.disabled = true;
-                separator.textContent = '──────────';
+                separator.textContent = '── Custom Presets ──';
                 cardIssuerSelect.appendChild(separator);
                 
                 for (const name in customPresets) {
@@ -163,22 +176,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            // Add the "Manage" option
             const manageSeparator = document.createElement('option');
             manageSeparator.disabled = true;
             manageSeparator.textContent = '──────────';
             cardIssuerSelect.appendChild(manageSeparator);
-            
             const manageOption = document.createElement('option');
             manageOption.value = 'manage_presets';
             manageOption.textContent = 'Manage Custom Presets...';
             cardIssuerSelect.appendChild(manageOption);
 
+            // Restore previous selection if possible
+            if (cardIssuerSelect.querySelector(`option[value="${currentSelection}"]`)) {
+                cardIssuerSelect.value = currentSelection;
+            } else {
+                cardIssuerSelect.value = 'none';
+            }
+
         } catch (error) {
             console.error('Error loading fees and presets:', error);
         }
     }
-
-    // Settings and Communication
+    
     function saveAndNotify() {
         const settings = {
             isActive: toggleButton.classList.contains('enabled'),
@@ -198,9 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Fee Preset Logic
     async function renderPresetManagementList() {
-        // ... (this function remains unchanged)
         const { feePresets } = await chrome.storage.sync.get('feePresets');
         presetsListDiv.innerHTML = '';
 
@@ -227,7 +244,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function addNewFee() {
-        // ... (this function remains unchanged)
         const name = newFeeNameInput.value.trim();
         const value = parseFloat(newFeeValueInput.value);
         if (!name || isNaN(value)) {
@@ -251,7 +267,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function deletePreset(nameToDelete) {
-        // ... (this function remains unchanged)
         const { feePresets } = await chrome.storage.sync.get('feePresets');
         if (feePresets && feePresets[nameToDelete]) {
             delete feePresets[nameToDelete];
@@ -264,7 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Event Listeners
     toggleButton.addEventListener('click', () => {
         const isActive = !toggleButton.classList.contains('enabled');
         updateToggleState(isActive);
@@ -277,7 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
         saveAndNotify();
     });
 
-    toCurrencySelect.addEventListener('change', () => {
+    toCurrencySelect.addEventListener('change', async () => {
+        await populateCardIssuers();
         updateTicker();
         saveAndNotify();
     });
@@ -291,6 +306,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     addFeeButton.addEventListener('click', addNewFee);
 
-    // Start the Popup
     init();
 });
